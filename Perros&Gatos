@@ -1,0 +1,144 @@
+#Importar librerias necesarias
+import keras
+import random
+from keras.preprocessing import image
+from glob import glob
+#pip intall opencv-python #sirve para instalar cv2
+import cv2, os
+import numpy as np 
+import matplotlib.pyplot as plt
+
+#Datos para el entrenamiento
+path='train'
+# Tamaño de la imagen
+ROW,COL=96,96
+
+dogs,cats=[],[]
+y_dogs, y_cats=[],[]
+
+# Carga de Datos
+
+#Se cargan las imagenes de perros
+dog_path = os.path.join(path, 'dogs', 'dog*')
+for dog_img in glob(dog_path):
+    dog = cv2.imread(dog_img)
+    dog = cv2.cvtColor(dog, cv2.COLOR_BGR2GRAY)
+    dog = cv2.resize(dog, (ROW,COL))
+    dog = image.img_to_array(dog)
+    dogs.append(dog)
+
+#Se cargan las imagenes de gatos
+cat_path=os.path.join(path,'cats','cat*')
+for cat_img in glob(cat_path):
+    cat = cv2.imread(cat_img)
+    cat = cv2.cvtColor(cat,cv2.COLOR_BGR2GRAY)
+    cat = cv2.resize(cat, (ROW,COL))
+    cat = image.img_to_array(cat)
+    cats.append(cat)
+    
+print('Se han cargado todas las imagenes')   
+
+#Muestra la longitud de los arreglos perros y gatos
+print('Longitud del array de perros:{}\nLongitud del array de gatos:{}'.format(len(dogs),len(cats)))
+
+#se define la clase
+classes=['dog','cat']
+
+#Se imprime imagenes de muestra de perros
+plt.figure(figsize=(12,8))
+
+for i in range(5):
+    plt.subplot(1, 5, i+1)
+    img = image.array_to_img(random.choice(dogs))
+    plt.imshow(img)
+    
+    plt.axis('off')
+    plt.title('se supone que es {}'.format(classes[0]))
+    
+plt.show()    
+
+# Se imprimen imagenes de muestra de gatos
+plt.figure(figsize=(12,8))
+
+for i in range(5):
+    plt.subplot(1, 5, i+1)
+    img = image.array_to_img(random.choice(cats))
+    plt.imshow(img)
+    
+    plt.axis('off')
+    plt.title('se supone que es {}'.format(classes[1]))
+plt.show()    
+
+#Se asignan estiqueta: 1 para perros 0 para gatos
+y_dogs=[1 for item in enumerate(dogs)]
+y_cats=[0 for item in enumerate(cats)]
+
+#Se llaman los arreglos para ser normalizados y asi ajustar los valores
+#entre 0 y 1 por lo cual se especifica que los datos sean flotantes
+dogs=np.asarray(dogs).astype('float32')
+cats=np.asarray(cats).astype('float32')
+y_dogs=np.asarray(y_dogs).astype('int32')
+y_cats=np.asarray(y_cats).astype('int32')
+dogs/=255
+cats/=255
+
+x=np.concatenate((dogs,cats),axis=0)
+y=np.concatenate((y_dogs,y_cats), axis=0)
+
+# Se define el modelo para CNN
+
+#Se importan las capas necesarias para formar un modelo CNN
+from keras.models import Sequential
+from keras.layers.convolutional import Conv2D, MaxPooling2D
+from keras.layers.core import Dense, Flatten, Dropout, Activation
+from keras.optimizers import Adam
+from keras.utils import np_utils
+from keras.callbacks import ModelCheckpoint
+from keras.models import save_model, load_model
+
+#Se definen los parametros con los cuales se va a ejecutar el modelo
+IMG_CHANNEL=1
+BATCH_SIZE=128 #se establece cada cuantas imagenes se va a iterar
+N_EPOCH=15 #se define cuantas veces se desea ejecutar el modelo 
+VERBOSE=2
+VALIDAION_SPLIT = .2
+OPTIM = Adam()
+N_CLASSES = len(classes) #se define el modelo en funcion al numero de clases
+
+y = np_utils.to_categorical(y, N_CLASSES)
+#se utiliza one hot encoding
+print('One-Hot Encodig listo')
+
+#se condensa el modelo para CNN en funcion a las capas elegidas para ejecutar
+#el entrenamiento, ademas se eligen las metricas a ser concideradas para medir
+#la efectividad del modelo.
+model=Sequential([
+    Conv2D(32, (3,3), padding='same', input_shape=(ROW, COL, IMG_CHANNEL),activation='relu'),
+    Conv2D(32, (3,3), padding='same', activation='relu'), 
+    MaxPooling2D(pool_size=(2,2)),
+    Dropout(.25),
+    Conv2D(64,(3,3), padding='same', activation='relu'),
+    Conv2D(64,(3,3), padding='same', activation='relu'),
+    MaxPooling2D(pool_size=(2,2)),
+    Dropout(.25),
+    Flatten(),
+    Dense(512, activation='relu'),
+    Dropout(.5),
+    Dense(N_CLASSES, activation='softmax')
+])
+#se muestra el resumen de la configuracion establecida para el modelo
+model.summary()
+
+#se compila el modelo
+model.compile(loss='categorical_crossentropy', optimizer=OPTIM,metrics=['accuracy'])
+#se establece el uso de callbacks para ir guardando cada iteracion
+#generada durante el entrenaiento
+checkpoint=ModelCheckpoint('model_checkpoint/dogs_vs_cats_redux_checkpoint.h5')
+
+# Ejecucion del modelo de CNN
+#se da inicio al entrenamiento del modelo en funcion de los parametros
+model.fit(x,y, batch_size=BATCH_SIZE, epochs=N_EPOCH, validation_split=VALIDAION_SPLIT, verbose=VERBOSE)
+
+#se evalua el modelo
+scores = model.evaluate(x, y, verbose=2)
+print('ACCURACY DEL MODELO\n{}: {}%'.format(model.metrics_names[1], scores[1]*100))
